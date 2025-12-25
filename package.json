@@ -1,0 +1,43 @@
+{
+  "name": "claude-env",
+  "version": "1.0.0",
+  "description": "Environment Orchestrator and Context Switcher for Claude Code CLI - Switch AI backends with a single command",
+  "main": "dist/index.js",
+  "bin": {
+    "ccx": "./dist/cli.js",
+    "claude-env": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "npx ts-node src/cli.ts",
+    "start": "node dist/cli.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "openrouter",
+    "ai",
+    "llm",
+    "environment",
+    "profile-manager",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "@inquirer/prompts": "^7.2.1",
+    "conf": "^13.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "typescript": "^5.6.3",
+    "ts-node": "^10.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
