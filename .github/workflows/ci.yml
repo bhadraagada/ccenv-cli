@@ -9,7 +9,7 @@ on:
 jobs:
   validate-and-build:
     name: Validate and Build
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2204
 
     strategy:
       matrix:
@@ -65,7 +65,7 @@ jobs:
     name: Publish to npm
     needs: validate-and-build
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
