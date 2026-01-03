@@ -17,6 +17,7 @@ import {
   importProfile
 } from './commands/profile.js';
 import { runSetupWizard, runQuickSetup } from './commands/wizard.js';
+import { listModels, getModelInfo, searchModelsInteractive } from './commands/models.js';
 import { getConfigPath } from './lib/config.js';
 import { ShellType } from './types.js';
 
@@ -122,6 +123,27 @@ program
   .command('templates')
   .description('List available provider templates')
   .action(showTemplates);
+
+// Models command - list, search, info
+program
+  .command('models [search]')
+  .description('List and search available models from OpenRouter')
+  .option('-l, --limit <number>', 'Max models to show', '30')
+  .option('-i, --info <model>', 'Show detailed info for a specific model')
+  .option('--interactive', 'Interactive model selection')
+  .action(async (search, options) => {
+    if (options.info) {
+      await getModelInfo(options.info);
+    } else if (options.interactive) {
+      const model = await searchModelsInteractive();
+      if (model) {
+        console.log(`\nSelected: ${model}`);
+        console.log(`\nUse with: ccx create <profile> --template openrouter --model ${model}`);
+      }
+    } else {
+      await listModels(search, parseInt(options.limit));
+    }
+  });
 
 // Interactive setup wizard
 program
