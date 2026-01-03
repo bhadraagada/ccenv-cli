@@ -4,6 +4,119 @@ import { select, input, confirm, password } from '@inquirer/prompts';
 import { listTemplates, getTemplate } from '../templates/providers.js';
 import * as config from '../lib/config.js';
 import { Profile } from '../types.js';
+import { fetchModels } from './models.js';
+
+interface OpenRouterModel {
+  id: string;
+  name: string;
+  pricing: { prompt: string; completion: string };
+  context_length: number;
+}
+
+function formatContext(contextLength: number): string {
+  if (contextLength >= 1000000) return `${(contextLength / 1000000).toFixed(1)}M`;
+  if (contextLength >= 1000) return `${(contextLength / 1000).toFixed(0)}K`;
+  return `${contextLength}`;
+}
+
+async function selectModelInteractive(defaultModel?: string): Promise<string | undefined> {
+  // Prefetch models in background
+  const modelsPromise = fetchModels();
+  
+  while (true) {
+    const searchOrDefault = await select({
+      message: 'How would you like to select a model?',
+      choices: [
+        { name: `Use default (${defaultModel || 'none'})`, value: 'default' },
+        { name: 'Search models from OpenRouter', value: 'search' },
+        { name: 'Enter model ID manually', value: 'manual' },
+      ]
+    });
+
+    if (searchOrDefault === 'default') {
+      return defaultModel;
+    }
+
+    if (searchOrDefault === 'manual') {
+      const model = await input({
+        message: 'Model ID:',
+        default: defaultModel
+      });
+      return model || defaultModel;
+    }
+
+    // Search mode
+    console.log('\nFetching models from OpenRouter...');
+    const models = await modelsPromise;
+
+    if (models.length === 0) {
+      console.log('Failed to fetch models. Falling back to manual entry.');
+      const model = await input({
+        message: 'Model ID:',
+        default: defaultModel
+      });
+      return model || defaultModel;
+    }
+
+    // Search loop - allows going back to search again
+    while (true) {
+      const searchTerm = await input({
+        message: 'Search models (e.g. "glm", "minimax", "claude"):',
+      });
+
+      let filtered = models as OpenRouterModel[];
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        filtered = (models as OpenRouterModel[]).filter(m =>
+          m.id.toLowerCase().includes(term) ||
+          m.name.toLowerCase().includes(term)
+        );
+      }
+
+      if (filtered.length === 0) {
+        console.log(`No models found matching "${searchTerm}". Try another search.\n`);
+        continue;
+      }
+
+      // Sort and limit
+      filtered.sort((a, b) => a.id.localeCompare(b.id));
+      const limited = filtered.slice(0, 30);
+
+      if (filtered.length > 30) {
+        console.log(`\nShowing first 30 of ${filtered.length} matches.\n`);
+      }
+
+      const choices = [
+        { name: '<< Back to search', value: '__back__' },
+        { name: '<< Back to model selection', value: '__back_menu__' },
+        ...limited.map(m => {
+          const promptPrice = parseFloat(m.pricing.prompt) * 1000000;
+          const ctx = formatContext(m.context_length);
+          return {
+            name: `${m.id.padEnd(40)} ${ctx.padEnd(8)} $${promptPrice.toFixed(2)}/1M`,
+            value: m.id
+          };
+        })
+      ];
+
+      const selected = await select({
+        message: 'Select a model:',
+        choices,
+        pageSize: 17
+      });
+
+      if (selected === '__back__') {
+        continue; // Go back to search
+      }
+      
+      if (selected === '__back_menu__') {
+        break; // Go back to main menu
+      }
+
+      return selected;
+    }
+  }
+}
 
 export async function runSetupWizard(): Promise<void> {
   console.log('');
@@ -56,9 +169,13 @@ export async function runSetupWizard(): Promise<void> {
     }
   }
   
-  // Get model
-  let model = template.defaultModel;
-  if (template.defaultModel) {
+  // Get model - with search option for OpenRouter
+  let model: string | undefined;
+  const isOpenRouter = templateChoice.startsWith('openrouter') || template.baseUrl.includes('openrouter');
+  
+  if (isOpenRouter) {
+    model = await selectModelInteractive(template.defaultModel);
+  } else if (template.defaultModel) {
     const useDefaultModel = await confirm({
       message: `Use default model (${template.defaultModel})?`,
       default: true
@@ -69,6 +186,8 @@ export async function runSetupWizard(): Promise<void> {
         message: 'Model name:',
         default: template.defaultModel
       });
+    } else {
+      model = template.defaultModel;
     }
   } else {
     model = await input({
@@ -167,7 +286,15 @@ export async function runQuickSetup(templateName: string): Promise<void> {
       return true;
     }
   });
+
+  // Model selection for OpenRouter templates
+  let model = template.defaultModel;
+  const isOpenRouter = templateName.startsWith('openrouter') || template.baseUrl.includes('openrouter');
   
+  if (isOpenRouter) {
+    model = await selectModelInteractive(template.defaultModel);
+  }
+
   let apiKey: string | undefined;
   if (template.requiresApiKey) {
     apiKey = await password({
@@ -182,7 +309,7 @@ export async function runQuickSetup(templateName: string): Promise<void> {
     description: template.description,
     provider: template.name,
     baseUrl: template.baseUrl,
-    model: template.defaultModel,
+    model: model,
     apiKey,
     clearAnthropicKey: template.clearAnthropicKey,
     createdAt: new Date().toISOString(),
